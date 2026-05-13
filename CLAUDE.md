@@ -11,13 +11,12 @@ pipelines. It has two modes running concurrently:
 **Reactive (human-triggered via Web UI chat):**
 - Natural language Q&A: "tell me more about ubuntu-desktop-amd64"
 - Failure diagnosis: "why isn't ubuntu-server-amd64 building?"
-- Fuzzy image name matching via Claude (handles typos and partial names)
+- Fuzzy image name matching via LLM (handles typos and partial names)
 
 ## Tech stack
 - Language: Go 1.21+
 - Orchestration: Temporal (local dev server: `temporal server start-dev`)
-- LLM: Claude API (claude-sonnet-4-20250514) for agent reasoning
-- Runtime LLM: OpenRouter API key (OPENROUTER_API_KEY) used by the Go app
+- LLM: OpenRouter API (OPENROUTER_API_KEY) — model `anthropic/claude-sonnet-4-5`
 - Web UI: single index.html — left panel SSE live feed, right panel chat
 - Build status source: internal FastAPI (mock if unavailable)
 - Build logs: fetched via HTTP GET from URL in build record; mock with local files
@@ -35,11 +34,11 @@ internal/
   activities/
     build_status.go      # GET /builds from FastAPI → []Image
     fetch_log.go         # HTTP GET log URL → last 200 lines
-    analyze_log.go       # Claude API → root cause JSON
-    fuzzy_match.go       # Claude API → match user string to image ID
-    compose_reply.go     # Claude API → formatted human reply
+    analyze_log.go       # OpenRouter API → root cause JSON
+    fuzzy_match.go       # OpenRouter API → match user string to image ID
+    compose_reply.go     # OpenRouter API → formatted human reply
   llm/
-    claude.go            # Anthropic API client wrapper (interface + real impl)
+    openrouter.go        # OpenRouter API client wrapper (interface + real impl)
   buildapi/
     client.go            # BuildClient interface + mock + real HTTP impl
     types.go             # All shared data types
@@ -90,14 +89,13 @@ type AgentReply struct {
 ```
 
 ## Environment variables
-ANTHROPIC_API_KEY      # Claude Code's own auth + LLM activities
-OPENROUTER_API_KEY     # Alternative LLM provider for the Go app
+OPENROUTER_API_KEY     # OpenRouter API key — required, fail fast if missing
 BUILD_API_URL          # FastAPI base URL (default: http://localhost:8000)
 TEMPORAL_HOST          # Temporal server (default: localhost:7233)
 PORT                   # Gateway HTTP port (default: 8080)
 
 ## Key conventions
-- All Claude calls go through internal/llm/claude.go — never call Anthropic directly from activities
+- All LLM calls go through internal/llm/openrouter.go — never call OpenRouter directly from activities
 - BuildClient and LLMClient are interfaces — always have a mock impl for tests
 - Errors wrapped with context: fmt.Errorf("activityName: %w", err)
 - snapshot.json written atomically (write to tmp file, rename)
@@ -113,8 +111,8 @@ terminal 3: go run cmd/server/main.go
 2. cmd/worker/main.go — Temporal worker boots, empty workflow registers, visible in localhost:8233
 3. internal/buildapi/ — BuildClient interface, mock with 5 mixed-status images
 4. internal/state/snapshot.go — atomic JSON read/write, diff logic
-5. ChangeWatchWorkflow — polls mock, diffs, logs changes (no Claude yet)
-6. internal/llm/claude.go — LLMClient interface + real Anthropic impl
+5. ChangeWatchWorkflow — polls mock, diffs, logs changes (no LLM yet)
+6. internal/llm/openrouter.go — LLMClient interface + real OpenRouter impl
 7. Activities one by one, each with _test.go using mocks
 8. QueryWorkflow end-to-end
 9. cmd/server/main.go — Gin gateway, /query, /feed SSE
