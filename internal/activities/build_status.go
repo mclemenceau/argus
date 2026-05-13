@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/mclemenceau/argus/internal/buildapi"
+	"github.com/mclemenceau/argus/internal/llm"
 	"github.com/mclemenceau/argus/internal/state"
 )
 
@@ -12,6 +13,7 @@ import (
 type Activities struct {
 	Builds   buildapi.BuildClient
 	Snapshot *state.Snapshot
+	LLM      llm.LLMClient
 }
 
 func (a *Activities) FetchBuildStatus(ctx context.Context) ([]buildapi.Image, error) {
