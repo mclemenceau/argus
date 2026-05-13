@@ -18,10 +18,14 @@ import (
 
 const taskQueue = "argus"
 
-// broadcaster fans out string messages to all subscribed SSE clients.
+const historySize = 20
+
+// broadcaster fans out string messages to all subscribed SSE clients
+// and replays the last historySize messages to new subscribers.
 type broadcaster struct {
 	mu      sync.Mutex
 	clients map[chan string]struct{}
+	history []string
 }
 
 func newBroadcaster() *broadcaster {
@@ -29,8 +33,11 @@ func newBroadcaster() *broadcaster {
 }
 
 func (b *broadcaster) subscribe() chan string {
-	ch := make(chan string, 16)
+	ch := make(chan string, historySize+16)
 	b.mu.Lock()
+	for _, msg := range b.history {
+		ch <- msg
+	}
 	b.clients[ch] = struct{}{}
 	b.mu.Unlock()
 	return ch
@@ -45,6 +52,10 @@ func (b *broadcaster) unsubscribe(ch chan string) {
 func (b *broadcaster) publish(msg string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.history = append(b.history, msg)
+	if len(b.history) > historySize {
+		b.history = b.history[len(b.history)-historySize:]
+	}
 	for ch := range b.clients {
 		select {
 		case ch <- msg:

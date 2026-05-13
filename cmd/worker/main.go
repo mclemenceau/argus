@@ -32,10 +32,11 @@ func main() {
 	defer c.Close()
 
 	act := &activities.Activities{
-		Artefacts: buildapi.NewHTTPClient(cfg.TestObserverURL),
-		Snapshot:  state.New("state/snapshot.json"),
-		LLM:       llm.NewOpenRouterClient(cfg.OpenRouterAPIKey, cfg.LLMModel),
-		FeedURL:   cfg.ServerURL,
+		Artefacts:      buildapi.NewHTTPClient(cfg.TestObserverURL),
+		Snapshot:       state.New("state/snapshot.json"),
+		LLM:            llm.NewOpenRouterClient(cfg.OpenRouterAPIKey, cfg.LLMModel),
+		FeedURL:        cfg.ServerURL,
+		DefaultRelease: cfg.DefaultRelease,
 	}
 
 	w := worker.New(c, taskQueue, worker.Options{})

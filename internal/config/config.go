@@ -8,6 +8,7 @@ import (
 type Config struct {
 	OpenRouterAPIKey string
 	LLMModel         string
+	DefaultRelease   string
 	TestObserverURL  string
 	TemporalHost     string
 	Port             string
@@ -23,6 +24,7 @@ func Load() (*Config, error) {
 	return &Config{
 		OpenRouterAPIKey: apiKey,
 		LLMModel:         envOrDefault("LLM_MODEL", "anthropic/claude-sonnet-4-5"),
+		DefaultRelease:   os.Getenv("DEFAULT_RELEASE"), // empty = auto-detect from data
 		TestObserverURL:  envOrDefault("TEST_OBSERVER_URL", "https://tests-api.ubuntu.com"),
 		TemporalHost:     envOrDefault("TEMPORAL_HOST", "localhost:7233"),
 		Port:             envOrDefault("PORT", "8080"),
