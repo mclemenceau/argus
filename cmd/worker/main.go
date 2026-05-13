@@ -10,6 +10,7 @@ import (
 	"github.com/mclemenceau/argus/internal/activities"
 	"github.com/mclemenceau/argus/internal/buildapi"
 	"github.com/mclemenceau/argus/internal/config"
+	"github.com/mclemenceau/argus/internal/llm"
 	"github.com/mclemenceau/argus/internal/state"
 	argusworkflow "github.com/mclemenceau/argus/internal/workflow"
 )
@@ -33,13 +34,14 @@ func main() {
 	act := &activities.Activities{
 		Builds:   buildapi.NewMockClient(),
 		Snapshot: state.New("state/snapshot.json"),
+		LLM:      llm.NewOpenRouterClient(cfg.OpenRouterAPIKey),
 	}
 
 	w := worker.New(c, taskQueue, worker.Options{})
 
 	w.RegisterWorkflow(argusworkflow.ChangeWatchWorkflow)
+	w.RegisterWorkflow(argusworkflow.QueryWorkflow)
 	w.RegisterWorkflow(StatusTableWorkflow)
-	w.RegisterWorkflow(QueryWorkflow)
 
 	w.RegisterActivity(act)
 

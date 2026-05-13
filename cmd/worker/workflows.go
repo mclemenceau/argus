@@ -2,6 +2,5 @@ package main
 
 import "go.temporal.io/sdk/workflow"
 
-// Stubs for workflows implemented in later blocks.
-func StatusTableWorkflow(ctx workflow.Context) error                    { return nil }
-func QueryWorkflow(ctx workflow.Context, _ string) (string, error)     { return "", nil }
+// StatusTableWorkflow stub — implemented in block 9 alongside the HTTP server.
+func StatusTableWorkflow(ctx workflow.Context) error { return nil }
