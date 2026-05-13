@@ -2,16 +2,28 @@ services:
 
   # ── Temporal dev server ───────────────────────────────────────────────────
   temporal:
-    image: temporalio/temporal-cli:latest
-    command: server start-dev --ip 0.0.0.0 --port 7233 --ui-port 8233
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=sqlite
+      - DB_PORT=0
     ports:
       - "7233:7233"   # gRPC (worker + server connect here)
-      - "8233:8233"   # Temporal Web UI
     healthcheck:
-      test: ["CMD", "temporal", "workflow", "list", "--address", "localhost:7233"]
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/127.0.0.1/7233>' 2>/dev/null"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+
+  # ── Temporal Web UI ───────────────────────────────────────────────────────
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8233:8080"   # Temporal Web UI
+    depends_on:
+      temporal:
+        condition: service_healthy
 
   # ── Temporal worker ───────────────────────────────────────────────────────
   worker:
