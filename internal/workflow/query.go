@@ -10,16 +10,21 @@ import (
 	"github.com/mclemenceau/argus/internal/buildapi"
 )
 
+const maxListArtefacts = 60
+
 func QueryWorkflow(ctx sdk.Context, query string) (buildapi.AgentReply, error) {
-	ctx = sdk.WithActivityOptions(ctx, sdk.ActivityOptions{
+	shortCtx := sdk.WithActivityOptions(ctx, sdk.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
+	})
+	longCtx := sdk.WithActivityOptions(ctx, sdk.ActivityOptions{
+		StartToCloseTimeout: 90 * time.Second,
 	})
 
 	var act *activities.Activities
 
 	// 1. Fetch current artefact list.
 	var artefacts []buildapi.Artefact
-	if err := sdk.ExecuteActivity(ctx, act.FetchBuildStatus).Get(ctx, &artefacts); err != nil {
+	if err := sdk.ExecuteActivity(shortCtx, act.FetchBuildStatus).Get(shortCtx, &artefacts); err != nil {
 		return buildapi.AgentReply{}, err
 	}
 
@@ -30,15 +35,18 @@ func QueryWorkflow(ctx sdk.Context, query string) (buildapi.AgentReply, error) {
 	}
 
 	var match activities.MatchResult
-	if err := sdk.ExecuteActivity(ctx, act.FuzzyMatch, query, names).Get(ctx, &match); err != nil {
+	if err := sdk.ExecuteActivity(shortCtx, act.FuzzyMatch, query, names).Get(shortCtx, &match); err != nil {
 		return buildapi.AgentReply{}, err
 	}
 
 	// 3a. List intent — filter artefacts and produce a markdown table.
 	if match.ListIntent {
 		filtered := filterByRelease(artefacts, match.Release)
+		if len(filtered) > maxListArtefacts {
+			filtered = filtered[:maxListArtefacts]
+		}
 		var reply buildapi.AgentReply
-		if err := sdk.ExecuteActivity(ctx, act.ComposeListReply, query, filtered).Get(ctx, &reply); err != nil {
+		if err := sdk.ExecuteActivity(longCtx, act.ComposeListReply, query, filtered).Get(longCtx, &reply); err != nil {
 			return buildapi.AgentReply{}, err
 		}
 		reply.WorkflowID = sdk.GetInfo(ctx).WorkflowExecution.ID
@@ -64,7 +72,7 @@ func QueryWorkflow(ctx sdk.Context, query string) (buildapi.AgentReply, error) {
 
 	// 5. Compose a reply based on artefact status.
 	var reply buildapi.AgentReply
-	if err := sdk.ExecuteActivity(ctx, act.ComposeReply, artefact, (*activities.LogAnalysis)(nil)).Get(ctx, &reply); err != nil {
+	if err := sdk.ExecuteActivity(shortCtx, act.ComposeReply, artefact, (*activities.LogAnalysis)(nil)).Get(shortCtx, &reply); err != nil {
 		return buildapi.AgentReply{}, err
 	}
 	reply.WorkflowID = sdk.GetInfo(ctx).WorkflowExecution.ID

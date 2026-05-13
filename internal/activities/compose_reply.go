@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mclemenceau/argus/internal/buildapi"
 )
@@ -18,9 +19,10 @@ You may use Markdown: **bold** and inline code. No headers or bullet points.`
 const composeListSystem = `You are a helpful Ubuntu release engineer assistant.
 Given a list of Ubuntu image artefacts and the user's query, respond with:
 1. One brief sentence summarising the overview (e.g. how many artefacts, any failures).
-2. A Markdown table with columns: | Name | Release | Version | Status | Stage |
+2. A Markdown table with columns: | Name | Product | Release | Age | Status |
 Sort and filter the table according to the user's intent — put failures first unless specified otherwise.
 Status rendering: APPROVED → ✅ approved, MARKED_AS_FAILED → ❌ failed, UNDECIDED → ⏳ pending.
+Age is already computed and provided as a human-readable string — use it as-is.
 Use only Markdown. No HTML.`
 
 // ComposeReply asks the LLM to write a human-readable summary and packages it into an AgentReply.
@@ -49,10 +51,10 @@ func (a *Activities) ComposeReply(ctx context.Context, artefact buildapi.Artefac
 func (a *Activities) ComposeListReply(ctx context.Context, query string, artefacts []buildapi.Artefact) (buildapi.AgentReply, error) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("User query: %q\n\nArtefacts (%d):\n", query, len(artefacts)))
-	sb.WriteString("Name | Release | Version | Status | Stage\n")
+	sb.WriteString("Name | Product | Release | Age | Status\n")
 	for _, art := range artefacts {
 		sb.WriteString(fmt.Sprintf("%s | %s | %s | %s | %s\n",
-			art.Name, art.Release, art.Version, art.Status, art.Stage))
+			art.Name, art.OS, art.Release, imageAge(art.Version), art.Status))
 	}
 
 	summary, err := a.LLM.Complete(ctx, composeListSystem, sb.String())
@@ -64,9 +66,9 @@ func (a *Activities) ComposeListReply(ctx context.Context, query string, artefac
 
 func buildComposePrompt(artefact buildapi.Artefact, analysis *LogAnalysis) string {
 	base := fmt.Sprintf(
-		"Artefact: %s\nRelease: %s\nVersion: %s\nOS: %s\nStage: %s\nStatus: %s",
-		artefact.Name, artefact.Release, artefact.Version,
-		artefact.OS, artefact.Stage, artefact.Status,
+		"Artefact: %s\nProduct: %s\nRelease: %s\nVersion: %s\nAge: %s\nStatus: %s",
+		artefact.Name, artefact.OS, artefact.Release,
+		artefact.Version, imageAge(artefact.Version), artefact.Status,
 	)
 
 	if artefact.ImageURL != "" {
@@ -79,6 +81,40 @@ func buildComposePrompt(artefact buildapi.Artefact, analysis *LogAnalysis) strin
 	}
 
 	return base
+}
+
+// imageAge returns a human-readable age string for a YYYYMMDD version field.
+func imageAge(version string) string {
+	if len(version) != 8 {
+		return "unknown"
+	}
+	t, err := time.Parse("20060102", version)
+	if err != nil {
+		return "unknown"
+	}
+	days := int(time.Since(t).Hours() / 24)
+	switch {
+	case days < 0:
+		return "today"
+	case days == 0:
+		return "today"
+	case days == 1:
+		return "1 day"
+	case days < 14:
+		return fmt.Sprintf("%d days", days)
+	case days < 60:
+		weeks := days / 7
+		if weeks == 1 {
+			return "1 week"
+		}
+		return fmt.Sprintf("%d weeks", weeks)
+	default:
+		months := days / 30
+		if months == 1 {
+			return "1 month"
+		}
+		return fmt.Sprintf("%d months", months)
+	}
 }
 
 func categoryFromStatus(status string) string {
