@@ -9,7 +9,7 @@ import (
 
 // LogAnalysis is the structured output from AnalyzeLog.
 type LogAnalysis struct {
-	Category    string   `json:"category"`    // infra|code|dependency|flaky|unknown
+	Category    string   `json:"category"` // infra|code|dependency|flaky|unknown
 	Hypothesis  string   `json:"hypothesis"`
 	LogExcerpts []string `json:"log_excerpts"`
 	NextAction  string   `json:"next_action"`

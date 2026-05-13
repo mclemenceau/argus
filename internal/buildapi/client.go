@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-const testObserverBase = "https://tests-api.ubuntu.com"
-
 // ArtefactClient fetches Ubuntu image artefacts from a data source.
 type ArtefactClient interface {
 	FetchArtefacts(ctx context.Context) ([]Artefact, error)

@@ -29,8 +29,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("worker: dial temporal: %v", err)
 	}
-	defer c.Close()
-
 	act := &activities.Activities{
 		Artefacts:      buildapi.NewHTTPClient(cfg.TestObserverURL),
 		Snapshot:       state.New("state/snapshot.json"),
@@ -51,8 +49,10 @@ func main() {
 
 	log.Printf("worker started on task queue %q (temporal: %s)", taskQueue, cfg.TemporalHost)
 	if err := w.Run(worker.InterruptCh()); err != nil {
+		c.Close()
 		log.Fatalf("worker: %v", err)
 	}
+	c.Close()
 }
 
 func startCronWorkflows(c client.Client) {

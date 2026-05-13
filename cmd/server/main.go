@@ -76,8 +76,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: dial temporal: %v", err)
 	}
-	defer c.Close()
-
 	b := newBroadcaster()
 
 	gin.SetMode(gin.ReleaseMode)
@@ -92,8 +90,10 @@ func main() {
 
 	log.Printf("server listening on :%s", cfg.Port)
 	if err := r.Run(":" + cfg.Port); err != nil {
+		c.Close()
 		log.Fatalf("server: %v", err)
 	}
+	c.Close()
 }
 
 func queryHandler(c client.Client) gin.HandlerFunc {

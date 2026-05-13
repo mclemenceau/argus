@@ -8,7 +8,7 @@ type Artefact struct {
 	Version  string `json:"version"` // YYYYMMDD build date
 	OS       string `json:"os"`
 	Release  string `json:"release"`
-	Stage    string `json:"stage"` // pending | current
+	Stage    string `json:"stage"`  // pending | current
 	Status   string `json:"status"` // APPROVED | MARKED_AS_FAILED | UNDECIDED
 	Archived bool   `json:"archived"`
 	ImageURL string `json:"image_url"`

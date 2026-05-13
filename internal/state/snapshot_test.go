@@ -126,9 +126,9 @@ func TestDiffMixed(t *testing.T) {
 	}
 	fresh := []buildapi.Artefact{
 		{ID: 1, Name: "a", Status: "MARKED_AS_FAILED"}, // new failure
-		{ID: 2, Name: "b", Status: "APPROVED"},          // recovery
-		{ID: 3, Name: "c", Status: "UNDECIDED"},          // no change
-		{ID: 4, Name: "d", Status: "UNDECIDED"},          // new artefact
+		{ID: 2, Name: "b", Status: "APPROVED"},         // recovery
+		{ID: 3, Name: "c", Status: "UNDECIDED"},        // no change
+		{ID: 4, Name: "d", Status: "UNDECIDED"},        // new artefact
 	}
 
 	report := Diff(old, fresh)
