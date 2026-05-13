@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARGUS — Release Monitor</title>
+  <link rel="stylesheet" href="https://assets.ubuntu.com/v1/vanilla_framework_version_4.51.0.min.css">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Two-panel workspace ── */
+    .argus-workspace {
+      display: flex;
+      flex: 1;
+      min-height: 0; /* required for flex child overflow */
+    }
+
+    .argus-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .argus-panel--feed { flex: 4; border-right: 1px solid #d9d9d9; }
+    .argus-panel--chat { flex: 6; }
+
+    .argus-panel__header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.5rem;
+      background: #f5f5f5;
+      border-bottom: 1px solid #d9d9d9;
+      flex-shrink: 0;
+    }
+
+    .argus-panel__title {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #666;
+      margin: 0;
+    }
+
+    .argus-panel__body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.5rem;
+    }
+
+    .argus-panel__footer {
+      flex-shrink: 0;
+      padding: 0.75rem 1.5rem;
+      border-top: 1px solid #d9d9d9;
+    }
+
+    /* ── Connection status dot ── */
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot--ok   { background: #0e8420; }
+    .status-dot--err  { background: #c7162b; }
+    .status-dot--wait { background: #f99b11; }
+
+    /* ── Feed entries ── */
+    .feed-entry { margin-bottom: 1rem; }
+
+    .feed-entry__time {
+      font-size: 0.6875rem;
+      color: #999;
+      margin-bottom: 0.25rem;
+    }
+
+    .feed-entry__body {
+      font-family: "Ubuntu Mono", "Courier New", monospace;
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f5f5f5;
+      border-left: 3px solid #e95420;
+      padding: 0.625rem 0.875rem;
+    }
+
+    .feed-entry--change .feed-entry__body { border-left-color: #c7162b; }
+
+    /* ── Chat rows ── */
+    .chat-row {
+      display: flex;
+      margin-bottom: 0.75rem;
+    }
+
+    .chat-row--user  { justify-content: flex-end; }
+    .chat-row--agent { justify-content: flex-start; }
+
+    .chat-bubble--user {
+      max-width: 75%;
+      padding: 0.5rem 0.875rem;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      background: #e95420;
+      color: #fff;
+      border-radius: 1rem 1rem 0.25rem 1rem;
+    }
+
+    .chat-reply { max-width: 90%; }
+
+    /* ── Thinking indicator ── */
+    .chat-thinking {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: #666;
+      padding: 0.5rem 0;
+    }
+
+    /* ── Query form ── */
+    .argus-form {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .argus-form input[type="text"] {
+      flex: 1;
+      margin-bottom: 0 !important;
+    }
+
+    .argus-form .p-button--positive {
+      margin-bottom: 0 !important;
+      white-space: nowrap;
+    }
+
+    /* ── Log excerpts in reply ── */
+    .log-excerpts { margin-top: 0.75rem; }
+
+    .log-excerpts summary {
+      font-size: 0.8125rem;
+      color: #666;
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+    }
+
+    .log-excerpts pre {
+      font-family: "Ubuntu Mono", "Courier New", monospace;
+      font-size: 0.75rem;
+      background: #2b2b2b;
+      color: #f0f0f0;
+      padding: 0.75rem;
+      border-radius: 2px;
+      overflow: auto;
+      max-height: 200px;
+      margin: 0;
+    }
+
+    /* ── Category badge ── */
+    .category-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      border-radius: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #fff;
+    }
+
+    /* ── Empty states ── */
+    .argus-empty {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #999;
+    }
+
+    .argus-empty p { margin: 0.25rem 0; font-size: 0.875rem; }
+    .argus-empty__icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ── -->
+<header class="p-navigation">
+  <div class="p-navigation__row">
+    <div class="p-navigation__banner">
+      <div class="p-navigation__tagged-logo">
+        <a href="/" class="p-navigation__link">
+          <span class="p-navigation__logo-title">ARGUS</span>
+        </a>
+      </div>
+    </div>
+    <nav class="p-navigation__nav" aria-label="main navigation">
+      <ul class="p-navigation__items">
+        <li class="p-navigation__item">
+          <span class="p-navigation__link" style="font-size:0.8125rem;pointer-events:none;cursor:default;">
+            Agent Release Graduate for Ubuntu Systems
+          </span>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<!-- ── Two-panel workspace ── -->
+<div class="argus-workspace">
+
+  <!-- Left: Live Feed -->
+  <div class="argus-panel argus-panel--feed">
+    <div class="argus-panel__header">
+      <span class="status-dot status-dot--wait" id="feed-dot" title="Feed connection status"></span>
+      <span class="argus-panel__title">Live Feed</span>
+      <span id="feed-status" style="font-size:0.75rem;color:#999;margin-left:auto;">Connecting…</span>
+    </div>
+    <div class="argus-panel__body" id="feed-body">
+      <div class="argus-empty" id="feed-empty">
+        <div class="argus-empty__icon">📡</div>
+        <p>Waiting for pipeline updates…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Chat -->
+  <div class="argus-panel argus-panel--chat">
+    <div class="argus-panel__header">
+      <span class="argus-panel__title">Ask ARGUS</span>
+    </div>
+    <div class="argus-panel__body" id="chat-body">
+      <div class="argus-empty" id="chat-empty">
+        <div class="argus-empty__icon">💬</div>
+        <p>Ask about any image or build failure.</p>
+        <p><em>"Why did ubuntu-server-amd64 fail?"</em></p>
+      </div>
+    </div>
+    <div class="argus-panel__footer">
+      <div class="argus-form">
+        <input type="text" id="query-input"
+               placeholder="e.g. what is the status of ubuntu-desktop-amd64?"
+               autocomplete="off">
+        <button class="p-button--positive" id="send-btn">Ask</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  'use strict';
+
+  const feedBody   = document.getElementById('feed-body');
+  const feedEmpty  = document.getElementById('feed-empty');
+  const feedDot    = document.getElementById('feed-dot');
+  const feedStatus = document.getElementById('feed-status');
+  const chatBody   = document.getElementById('chat-body');
+  const chatEmpty  = document.getElementById('chat-empty');
+  const queryInput = document.getElementById('query-input');
+  const sendBtn    = document.getElementById('send-btn');
+
+  // ── Utilities ────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    if (!s) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function ts() {
+    return new Date().toLocaleTimeString([], {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  }
+
+  function scrollEnd(el) { el.scrollTop = el.scrollHeight; }
+
+  // ── SSE Feed ─────────────────────────────────────────────────────────────
+
+  const FEED_STATES = {
+    ok:   ['status-dot--ok',   'Connected'],
+    err:  ['status-dot--err',  'Reconnecting…'],
+    wait: ['status-dot--wait', 'Connecting…'],
+  };
+
+  function setFeedState(state) {
+    const [cls, label] = FEED_STATES[state] || FEED_STATES.wait;
+    feedDot.className      = 'status-dot ' + cls;
+    feedStatus.textContent = label;
+  }
+
+  function appendFeedEntry(text) {
+    feedEmpty.style.display = 'none';
+    const isChange = /=== Change Report/.test(text);
+    const el = document.createElement('div');
+    el.className = 'feed-entry' + (isChange ? ' feed-entry--change' : '');
+    el.innerHTML =
+      `<div class="feed-entry__time">${ts()}</div>` +
+      `<div class="feed-entry__body">${esc(text)}</div>`;
+    feedBody.appendChild(el);
+    scrollEnd(feedBody);
+  }
+
+  (function connectSSE() {
+    const es = new EventSource('/feed');
+    es.addEventListener('open',    ()  => setFeedState('ok'));
+    es.addEventListener('message', (e) => { setFeedState('ok'); appendFeedEntry(e.data); });
+    es.addEventListener('error',   ()  => {
+      setFeedState('err');
+      es.close();
+      setTimeout(connectSSE, 3000);
+    });
+  })();
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+
+  const CATEGORY_COLOR = {
+    infra:      '#e95420',
+    code:       '#c7162b',
+    dependency: '#f99b11',
+    flaky:      '#f99b11',
+    unknown:    '#888888',
+  };
+
+  function hideEmpty() { chatEmpty.style.display = 'none'; }
+
+  function appendUserMsg(text) {
+    hideEmpty();
+    const el = document.createElement('div');
+    el.className = 'chat-row chat-row--user';
+    el.innerHTML = `<div class="chat-bubble--user">${esc(text)}</div>`;
+    chatBody.appendChild(el);
+    scrollEnd(chatBody);
+  }
+
+  function showThinking() {
+    hideEmpty();
+    const el = document.createElement('div');
+    el.className = 'chat-row chat-row--agent';
+    el.id = 'chat-thinking';
+    el.innerHTML = `<div class="chat-thinking">
+      <span class="p-icon--spinner u-animation--spin" aria-hidden="true"></span>
+      Analysing…
+    </div>`;
+    chatBody.appendChild(el);
+    scrollEnd(chatBody);
+  }
+
+  function hideThinking() {
+    const el = document.getElementById('chat-thinking');
+    if (el) el.remove();
+  }
+
+  function renderReply(reply) {
+    const color = CATEGORY_COLOR[reply.category] || CATEGORY_COLOR.unknown;
+
+    let logHtml = '';
+    if (reply.log_excerpts && reply.log_excerpts.length > 0) {
+      logHtml = `<details class="log-excerpts">
+        <summary>Log excerpts (${reply.log_excerpts.length})</summary>
+        <pre>${reply.log_excerpts.map(esc).join('\n─────\n')}</pre>
+      </details>`;
+    }
+
+    const nextHtml = reply.next_action
+      ? `<p style="margin:0.75rem 0 0;font-size:0.8125rem;color:#666;">
+           <strong>Next:</strong> ${esc(reply.next_action)}
+         </p>`
+      : '';
+
+    const wfHtml = reply.workflow_id
+      ? `<span style="font-size:0.6875rem;color:#999;font-family:monospace;margin-left:0.5rem;">${esc(reply.workflow_id)}</span>`
+      : '';
+
+    const el = document.createElement('div');
+    el.className = 'chat-row chat-row--agent';
+    el.innerHTML = `<div class="chat-reply">
+      <div class="p-card" style="margin:0;">
+        <div style="padding:1rem;">
+          <div style="display:flex;align-items:center;margin-bottom:0.75rem;">
+            <span class="category-badge" style="background:${color};">${esc(reply.category || 'unknown')}</span>
+            ${wfHtml}
+          </div>
+          <p style="margin:0 0 0.5rem;font-weight:600;">${esc(reply.summary)}</p>
+          ${reply.hypothesis
+            ? `<p style="margin:0 0 0.75rem;color:#333;font-size:0.875rem;">${esc(reply.hypothesis)}</p>`
+            : ''}
+          ${logHtml}
+          ${nextHtml}
+        </div>
+      </div>
+    </div>`;
+    chatBody.appendChild(el);
+    scrollEnd(chatBody);
+  }
+
+  function renderError(msg) {
+    const el = document.createElement('div');
+    el.className = 'chat-row chat-row--agent';
+    el.innerHTML = `<div class="p-notification--negative" style="max-width:90%;margin:0;">
+      <div class="p-notification__content">
+        <p class="p-notification__message">${esc(msg)}</p>
+      </div>
+    </div>`;
+    chatBody.appendChild(el);
+    scrollEnd(chatBody);
+  }
+
+  function setLoading(on) {
+    sendBtn.disabled      = on;
+    queryInput.disabled   = on;
+    sendBtn.textContent   = on ? 'Asking…' : 'Ask';
+  }
+
+  async function sendQuery() {
+    const q = queryInput.value.trim();
+    if (!q || sendBtn.disabled) return;
+
+    appendUserMsg(q);
+    queryInput.value = '';
+    showThinking();
+    setLoading(true);
+
+    try {
+      const res = await fetch('/query', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: q}),
+      });
+      hideThinking();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        renderError(data.error || `Server error (HTTP ${res.status})`);
+      } else {
+        renderReply(await res.json());
+      }
+    } catch (err) {
+      hideThinking();
+      renderError(err.message || 'Network error');
+    } finally {
+      setLoading(false);
+      queryInput.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendQuery);
+  queryInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
+  });
+</script>
+</body>
+</html>
