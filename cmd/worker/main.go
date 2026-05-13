@@ -34,7 +34,7 @@ func main() {
 	act := &activities.Activities{
 		Artefacts: buildapi.NewHTTPClient(cfg.TestObserverURL),
 		Snapshot:  state.New("state/snapshot.json"),
-		LLM:       llm.NewOpenRouterClient(cfg.OpenRouterAPIKey),
+		LLM:       llm.NewOpenRouterClient(cfg.OpenRouterAPIKey, cfg.LLMModel),
 		FeedURL:   cfg.ServerURL,
 	}
 

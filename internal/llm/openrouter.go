@@ -10,10 +10,7 @@ import (
 	"time"
 )
 
-const (
-	baseURL      = "https://openrouter.ai/api/v1/chat/completions"
-	defaultModel = "anthropic/claude-sonnet-4-5"
-)
+const baseURL = "https://openrouter.ai/api/v1/chat/completions"
 
 // LLMClient is the interface all activities use — never call OpenRouter directly.
 type LLMClient interface {
@@ -27,10 +24,10 @@ type OpenRouterClient struct {
 	http   *http.Client
 }
 
-func NewOpenRouterClient(apiKey string) *OpenRouterClient {
+func NewOpenRouterClient(apiKey, model string) *OpenRouterClient {
 	return &OpenRouterClient{
 		apiKey: apiKey,
-		model:  defaultModel,
+		model:  model,
 		http:   &http.Client{Timeout: 60 * time.Second},
 	}
 }
