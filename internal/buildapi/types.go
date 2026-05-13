@@ -1,30 +1,32 @@
 package buildapi
 
-import "time"
-
-type Image struct {
-	ID         string    `json:"id"`
-	Package    string    `json:"package"`
-	Series     string    `json:"series"`
-	Arch       string    `json:"arch"`
-	Status     string    `json:"status"` // BUILDING|SUCCESS|FAILED|CANCELLED
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at"`
-	LogURL     string    `json:"log_url"`
+// Artefact mirrors the Test Observer API ArtefactResponse for the image family.
+// Only fields used by ARGUS are included; extra API fields are silently discarded.
+type Artefact struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Version  string `json:"version"` // YYYYMMDD build date
+	OS       string `json:"os"`
+	Release  string `json:"release"`
+	Stage    string `json:"stage"` // pending | current
+	Status   string `json:"status"` // APPROVED | MARKED_AS_FAILED | UNDECIDED
+	Archived bool   `json:"archived"`
+	ImageURL string `json:"image_url"`
 }
 
 type ChangeReport struct {
-	NewFailures  []ImageDelta `json:"new_failures"`
-	Recoveries   []ImageDelta `json:"recoveries"`
-	OtherChanges []ImageDelta `json:"other_changes"`
-	NewImages    []Image      `json:"new_images"`
+	NewFailures  []ArtefactDelta `json:"new_failures"`
+	Recoveries   []ArtefactDelta `json:"recoveries"`
+	OtherChanges []ArtefactDelta `json:"other_changes"`
+	NewArtefacts []Artefact      `json:"new_artefacts"`
 }
 
-type ImageDelta struct {
-	Image     string    `json:"image"`
-	OldStatus string    `json:"old_status"`
-	NewStatus string    `json:"new_status"`
-	Since     time.Time `json:"since"`
+type ArtefactDelta struct {
+	Name      string `json:"name"`
+	Release   string `json:"release"`
+	Version   string `json:"version"`
+	OldStatus string `json:"old_status"`
+	NewStatus string `json:"new_status"`
 }
 
 type AgentReply struct {

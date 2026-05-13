@@ -8,11 +8,14 @@ import (
 	"time"
 )
 
-type BuildClient interface {
-	FetchBuilds(ctx context.Context) ([]Image, error)
+const testObserverBase = "https://tests-api.ubuntu.com"
+
+// ArtefactClient fetches Ubuntu image artefacts from a data source.
+type ArtefactClient interface {
+	FetchArtefacts(ctx context.Context) ([]Artefact, error)
 }
 
-// HTTPClient calls the real FastAPI build-status service.
+// HTTPClient calls the Test Observer API at tests-api.ubuntu.com.
 type HTTPClient struct {
 	baseURL string
 	http    *http.Client
@@ -21,89 +24,49 @@ type HTTPClient struct {
 func NewHTTPClient(baseURL string) *HTTPClient {
 	return &HTTPClient{
 		baseURL: baseURL,
-		http:    &http.Client{Timeout: 10 * time.Second},
+		http:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (c *HTTPClient) FetchBuilds(ctx context.Context) ([]Image, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/builds", nil)
+func (c *HTTPClient) FetchArtefacts(ctx context.Context) ([]Artefact, error) {
+	url := c.baseURL + "/v1/artefacts?family=image"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("FetchBuilds: new request: %w", err)
+		return nil, fmt.Errorf("FetchArtefacts: new request: %w", err)
 	}
+	req.Header.Set("X-CSRF-Token", "1")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("FetchBuilds: %w", err)
+		return nil, fmt.Errorf("FetchArtefacts: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("FetchBuilds: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("FetchArtefacts: unexpected status %d", resp.StatusCode)
 	}
 
-	var images []Image
-	if err := json.NewDecoder(resp.Body).Decode(&images); err != nil {
-		return nil, fmt.Errorf("FetchBuilds: decode: %w", err)
+	var artefacts []Artefact
+	if err := json.NewDecoder(resp.Body).Decode(&artefacts); err != nil {
+		return nil, fmt.Errorf("FetchArtefacts: decode: %w", err)
 	}
-	return images, nil
+	return artefacts, nil
 }
 
-// MockClient returns a fixed set of 5 mixed-status images for local dev and tests.
+// MockClient returns a fixed set of artefacts for local dev and tests.
 type MockClient struct{}
 
 func NewMockClient() *MockClient { return &MockClient{} }
 
-func (m *MockClient) FetchBuilds(_ context.Context) ([]Image, error) {
+func (m *MockClient) FetchArtefacts(_ context.Context) ([]Artefact, error) {
 	now := time.Now().UTC()
-	return []Image{
-		{
-			ID:         "ubuntu-desktop-amd64",
-			Package:    "ubuntu-desktop",
-			Series:     "plucky",
-			Arch:       "amd64",
-			Status:     "SUCCESS",
-			StartedAt:  now.Add(-90 * time.Minute),
-			FinishedAt: now.Add(-60 * time.Minute),
-			LogURL:     "http://localhost:8000/logs/ubuntu-desktop-amd64",
-		},
-		{
-			ID:         "ubuntu-server-amd64",
-			Package:    "ubuntu-server",
-			Series:     "plucky",
-			Arch:       "amd64",
-			Status:     "FAILED",
-			StartedAt:  now.Add(-45 * time.Minute),
-			FinishedAt: now.Add(-30 * time.Minute),
-			LogURL:     "http://localhost:8000/logs/ubuntu-server-amd64",
-		},
-		{
-			ID:        "ubuntu-desktop-arm64",
-			Package:   "ubuntu-desktop",
-			Series:    "plucky",
-			Arch:      "arm64",
-			Status:    "BUILDING",
-			StartedAt: now.Add(-20 * time.Minute),
-			LogURL:    "http://localhost:8000/logs/ubuntu-desktop-arm64",
-		},
-		{
-			ID:         "ubuntu-server-arm64",
-			Package:    "ubuntu-server",
-			Series:     "plucky",
-			Arch:       "arm64",
-			Status:     "CANCELLED",
-			StartedAt:  now.Add(-120 * time.Minute),
-			FinishedAt: now.Add(-110 * time.Minute),
-			LogURL:     "http://localhost:8000/logs/ubuntu-server-arm64",
-		},
-		{
-			ID:         "ubuntu-minimal-amd64",
-			Package:    "ubuntu-minimal",
-			Series:     "plucky",
-			Arch:       "amd64",
-			Status:     "SUCCESS",
-			StartedAt:  now.Add(-180 * time.Minute),
-			FinishedAt: now.Add(-150 * time.Minute),
-			LogURL:     "http://localhost:8000/logs/ubuntu-minimal-amd64",
-		},
+	today := now.Format("20060102")
+	yesterday := now.AddDate(0, 0, -1).Format("20060102")
+	return []Artefact{
+		{ID: 1001, Name: "plucky-desktop-amd64.iso", Version: today, OS: "ubuntu", Release: "plucky", Stage: "pending", Status: "APPROVED"},
+		{ID: 1002, Name: "plucky-desktop-arm64.iso", Version: today, OS: "ubuntu", Release: "plucky", Stage: "pending", Status: "UNDECIDED"},
+		{ID: 1003, Name: "plucky-server-amd64.iso", Version: today, OS: "ubuntu-server", Release: "plucky", Stage: "pending", Status: "MARKED_AS_FAILED"},
+		{ID: 1004, Name: "plucky-minimal-amd64.iso", Version: yesterday, OS: "ubuntu-minimal", Release: "plucky", Stage: "pending", Status: "APPROVED"},
+		{ID: 1005, Name: "noble-desktop-amd64.iso", Version: yesterday, OS: "ubuntu", Release: "noble", Stage: "current", Status: "APPROVED"},
 	}, nil
 }

@@ -11,30 +11,30 @@ import (
 
 // Activities holds the dependencies injected at worker startup.
 type Activities struct {
-	Builds   buildapi.BuildClient
-	Snapshot *state.Snapshot
-	LLM      llm.LLMClient
-	FeedURL  string // base URL of the HTTP server for SSE push
+	Artefacts buildapi.ArtefactClient
+	Snapshot  *state.Snapshot
+	LLM       llm.LLMClient
+	FeedURL   string // base URL of the HTTP server for SSE push
 }
 
-func (a *Activities) FetchBuildStatus(ctx context.Context) ([]buildapi.Image, error) {
-	images, err := a.Builds.FetchBuilds(ctx)
+func (a *Activities) FetchBuildStatus(ctx context.Context) ([]buildapi.Artefact, error) {
+	artefacts, err := a.Artefacts.FetchArtefacts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("FetchBuildStatus: %w", err)
 	}
-	return images, nil
+	return artefacts, nil
 }
 
-func (a *Activities) LoadSnapshot(_ context.Context) ([]buildapi.Image, error) {
-	images, err := a.Snapshot.Read()
+func (a *Activities) LoadSnapshot(_ context.Context) ([]buildapi.Artefact, error) {
+	artefacts, err := a.Snapshot.Read()
 	if err != nil {
 		return nil, fmt.Errorf("LoadSnapshot: %w", err)
 	}
-	return images, nil
+	return artefacts, nil
 }
 
-func (a *Activities) SaveSnapshot(_ context.Context, images []buildapi.Image) error {
-	if err := a.Snapshot.Write(images); err != nil {
+func (a *Activities) SaveSnapshot(_ context.Context, artefacts []buildapi.Artefact) error {
+	if err := a.Snapshot.Write(artefacts); err != nil {
 		return fmt.Errorf("SaveSnapshot: %w", err)
 	}
 	return nil

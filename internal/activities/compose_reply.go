@@ -7,15 +7,17 @@ import (
 	"github.com/mclemenceau/argus/internal/buildapi"
 )
 
-const composeReplySystem = `You are a helpful Ubuntu build engineer assistant.
-Write a concise, human-friendly paragraph (2-4 sentences) summarising the build situation.
-Be direct and specific — mention the image name, current status, and key details.
+const composeReplySystem = `You are a helpful Ubuntu release engineer assistant.
+Write a concise, human-friendly paragraph (2-4 sentences) summarising the artefact situation.
+Be direct and specific — mention the image name, release, version (build date), and current status.
+Status values: APPROVED means QA-signed-off, MARKED_AS_FAILED means reviewers flagged a problem,
+UNDECIDED means awaiting human review.
 Do not use bullet points or headers. Plain prose only.`
 
 // ComposeReply asks the LLM to write a human-readable summary and packages it into an AgentReply.
 // Pass a non-nil analysis for failure diagnosis flows; nil for simple status queries.
-func (a *Activities) ComposeReply(ctx context.Context, image buildapi.Image, analysis *LogAnalysis) (buildapi.AgentReply, error) {
-	prompt := buildComposePrompt(image, analysis)
+func (a *Activities) ComposeReply(ctx context.Context, artefact buildapi.Artefact, analysis *LogAnalysis) (buildapi.AgentReply, error) {
+	prompt := buildComposePrompt(artefact, analysis)
 
 	summary, err := a.LLM.Complete(ctx, composeReplySystem, prompt)
 	if err != nil {
@@ -34,13 +36,15 @@ func (a *Activities) ComposeReply(ctx context.Context, image buildapi.Image, ana
 	return reply, nil
 }
 
-func buildComposePrompt(image buildapi.Image, analysis *LogAnalysis) string {
-	base := fmt.Sprintf("Image: %s\nPackage: %s\nSeries: %s\nArch: %s\nStatus: %s\nStarted: %s",
-		image.ID, image.Package, image.Series, image.Arch, image.Status,
-		image.StartedAt.Format("2006-01-02 15:04 UTC"))
+func buildComposePrompt(artefact buildapi.Artefact, analysis *LogAnalysis) string {
+	base := fmt.Sprintf(
+		"Artefact: %s\nRelease: %s\nVersion: %s\nOS: %s\nStage: %s\nStatus: %s",
+		artefact.Name, artefact.Release, artefact.Version,
+		artefact.OS, artefact.Stage, artefact.Status,
+	)
 
-	if !image.FinishedAt.IsZero() {
-		base += fmt.Sprintf("\nFinished: %s", image.FinishedAt.Format("2006-01-02 15:04 UTC"))
+	if artefact.ImageURL != "" {
+		base += fmt.Sprintf("\nImage URL: %s", artefact.ImageURL)
 	}
 
 	if analysis != nil {

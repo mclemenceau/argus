@@ -19,12 +19,12 @@ func ChangeWatchWorkflow(ctx sdk.Context) error {
 
 	var act *activities.Activities
 
-	var fresh []buildapi.Image
+	var fresh []buildapi.Artefact
 	if err := sdk.ExecuteActivity(ctx, act.FetchBuildStatus).Get(ctx, &fresh); err != nil {
 		return err
 	}
 
-	var old []buildapi.Image
+	var old []buildapi.Artefact
 	if err := sdk.ExecuteActivity(ctx, act.LoadSnapshot).Get(ctx, &old); err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func ChangeWatchWorkflow(ctx sdk.Context) error {
 			"new_failures", len(report.NewFailures),
 			"recoveries", len(report.Recoveries),
 			"other_changes", len(report.OtherChanges),
-			"new_images", len(report.NewImages),
+			"new_artefacts", len(report.NewArtefacts),
 		)
 		msg := formatChangeReport(report)
 		if err := sdk.ExecuteActivity(ctx, act.PushToFeed, msg).Get(ctx, nil); err != nil {
@@ -55,20 +55,20 @@ func formatChangeReport(r buildapi.ChangeReport) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("=== Change Report (%s) ===\n", time.Now().UTC().Format("15:04 UTC")))
 	for _, f := range r.NewFailures {
-		sb.WriteString(fmt.Sprintf("🔴 FAILED    %s  (was %s)\n", f.Image, f.OldStatus))
+		sb.WriteString(fmt.Sprintf("🔴 FAILED     %s  %s  (was %s)\n", f.Release, f.Name, f.OldStatus))
 	}
 	for _, rec := range r.Recoveries {
-		sb.WriteString(fmt.Sprintf("🟢 RECOVERED %s  (now %s)\n", rec.Image, rec.NewStatus))
+		sb.WriteString(fmt.Sprintf("🟢 APPROVED   %s  %s  (was MARKED_AS_FAILED)\n", rec.Release, rec.Name))
 	}
 	for _, o := range r.OtherChanges {
-		sb.WriteString(fmt.Sprintf("🔵 CHANGED   %s  (%s → %s)\n", o.Image, o.OldStatus, o.NewStatus))
+		sb.WriteString(fmt.Sprintf("🔵 CHANGED    %s  %s  (%s → %s)\n", o.Release, o.Name, o.OldStatus, o.NewStatus))
 	}
-	for _, n := range r.NewImages {
-		sb.WriteString(fmt.Sprintf("🆕 NEW       %s  (%s)\n", n.ID, n.Status))
+	for _, n := range r.NewArtefacts {
+		sb.WriteString(fmt.Sprintf("🆕 NEW        %s  %s  v%s\n", n.Release, n.Name, n.Version))
 	}
 	return sb.String()
 }
 
 func hasChanges(r buildapi.ChangeReport) bool {
-	return len(r.NewFailures)+len(r.Recoveries)+len(r.OtherChanges)+len(r.NewImages) > 0
+	return len(r.NewFailures)+len(r.Recoveries)+len(r.OtherChanges)+len(r.NewArtefacts) > 0
 }

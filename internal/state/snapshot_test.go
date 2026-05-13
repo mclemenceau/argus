@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/mclemenceau/argus/internal/buildapi"
 )
@@ -22,10 +21,10 @@ func TestReadWriteRoundtrip(t *testing.T) {
 		t.Fatalf("expected nil, got %v", got)
 	}
 
-	images := []buildapi.Image{
-		{ID: "ubuntu-desktop-amd64", Status: "SUCCESS", StartedAt: time.Now().UTC()},
+	artefacts := []buildapi.Artefact{
+		{ID: 1001, Name: "noble-desktop-amd64.iso", Release: "noble", Version: "20260402", Status: "APPROVED"},
 	}
-	if err := s.Write(images); err != nil {
+	if err := s.Write(artefacts); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -33,7 +32,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read after write: %v", err)
 	}
-	if len(got) != 1 || got[0].ID != images[0].ID {
+	if len(got) != 1 || got[0].ID != artefacts[0].ID {
 		t.Fatalf("roundtrip mismatch: %v", got)
 	}
 }
@@ -42,7 +41,7 @@ func TestWriteIsAtomic(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "snapshot.json")
 	s := New(path)
 
-	if err := s.Write([]buildapi.Image{{ID: "a", Status: "SUCCESS"}}); err != nil {
+	if err := s.Write([]buildapi.Artefact{{ID: 1, Name: "a", Status: "APPROVED"}}); err != nil {
 		t.Fatal(err)
 	}
 	// Temp file must be gone after a successful write.
@@ -52,39 +51,39 @@ func TestWriteIsAtomic(t *testing.T) {
 }
 
 func TestDiffNewFailure(t *testing.T) {
-	old := []buildapi.Image{{ID: "x", Status: "BUILDING"}}
-	fresh := []buildapi.Image{{ID: "x", Status: "FAILED"}}
+	old := []buildapi.Artefact{{ID: 1, Name: "x", Status: "UNDECIDED"}}
+	fresh := []buildapi.Artefact{{ID: 1, Name: "x", Status: "MARKED_AS_FAILED"}}
 
 	report := Diff(old, fresh)
 
 	if len(report.NewFailures) != 1 {
 		t.Fatalf("expected 1 new failure, got %d", len(report.NewFailures))
 	}
-	if report.NewFailures[0].OldStatus != "BUILDING" || report.NewFailures[0].NewStatus != "FAILED" {
+	if report.NewFailures[0].OldStatus != "UNDECIDED" || report.NewFailures[0].NewStatus != "MARKED_AS_FAILED" {
 		t.Fatalf("unexpected delta: %+v", report.NewFailures[0])
 	}
-	if len(report.Recoveries)+len(report.OtherChanges)+len(report.NewImages) != 0 {
+	if len(report.Recoveries)+len(report.OtherChanges)+len(report.NewArtefacts) != 0 {
 		t.Fatal("unexpected entries in other buckets")
 	}
 }
 
 func TestDiffRecovery(t *testing.T) {
-	old := []buildapi.Image{{ID: "x", Status: "FAILED"}}
-	fresh := []buildapi.Image{{ID: "x", Status: "SUCCESS"}}
+	old := []buildapi.Artefact{{ID: 1, Name: "x", Status: "MARKED_AS_FAILED"}}
+	fresh := []buildapi.Artefact{{ID: 1, Name: "x", Status: "APPROVED"}}
 
 	report := Diff(old, fresh)
 
 	if len(report.Recoveries) != 1 {
 		t.Fatalf("expected 1 recovery, got %d", len(report.Recoveries))
 	}
-	if len(report.NewFailures)+len(report.OtherChanges)+len(report.NewImages) != 0 {
+	if len(report.NewFailures)+len(report.OtherChanges)+len(report.NewArtefacts) != 0 {
 		t.Fatal("unexpected entries in other buckets")
 	}
 }
 
 func TestDiffOtherChange(t *testing.T) {
-	old := []buildapi.Image{{ID: "x", Status: "BUILDING"}}
-	fresh := []buildapi.Image{{ID: "x", Status: "CANCELLED"}}
+	old := []buildapi.Artefact{{ID: 1, Name: "x", Status: "UNDECIDED"}}
+	fresh := []buildapi.Artefact{{ID: 1, Name: "x", Status: "APPROVED"}}
 
 	report := Diff(old, fresh)
 
@@ -93,43 +92,43 @@ func TestDiffOtherChange(t *testing.T) {
 	}
 }
 
-func TestDiffNewImage(t *testing.T) {
-	old := []buildapi.Image{}
-	fresh := []buildapi.Image{{ID: "brand-new", Status: "BUILDING"}}
+func TestDiffNewArtefact(t *testing.T) {
+	old := []buildapi.Artefact{}
+	fresh := []buildapi.Artefact{{ID: 999, Name: "brand-new", Status: "UNDECIDED"}}
 
 	report := Diff(old, fresh)
 
-	if len(report.NewImages) != 1 {
-		t.Fatalf("expected 1 new image, got %d", len(report.NewImages))
+	if len(report.NewArtefacts) != 1 {
+		t.Fatalf("expected 1 new artefact, got %d", len(report.NewArtefacts))
 	}
-	if report.NewImages[0].ID != "brand-new" {
-		t.Fatalf("wrong image ID: %s", report.NewImages[0].ID)
+	if report.NewArtefacts[0].ID != 999 {
+		t.Fatalf("wrong artefact ID: %d", report.NewArtefacts[0].ID)
 	}
 }
 
 func TestDiffNoChange(t *testing.T) {
-	images := []buildapi.Image{
-		{ID: "a", Status: "SUCCESS"},
-		{ID: "b", Status: "FAILED"},
+	artefacts := []buildapi.Artefact{
+		{ID: 1, Name: "a", Status: "APPROVED"},
+		{ID: 2, Name: "b", Status: "MARKED_AS_FAILED"},
 	}
-	report := Diff(images, images)
+	report := Diff(artefacts, artefacts)
 
-	if len(report.NewFailures)+len(report.Recoveries)+len(report.OtherChanges)+len(report.NewImages) != 0 {
+	if len(report.NewFailures)+len(report.Recoveries)+len(report.OtherChanges)+len(report.NewArtefacts) != 0 {
 		t.Fatalf("expected empty report, got %+v", report)
 	}
 }
 
 func TestDiffMixed(t *testing.T) {
-	old := []buildapi.Image{
-		{ID: "a", Status: "SUCCESS"},
-		{ID: "b", Status: "FAILED"},
-		{ID: "c", Status: "BUILDING"},
+	old := []buildapi.Artefact{
+		{ID: 1, Name: "a", Status: "APPROVED"},
+		{ID: 2, Name: "b", Status: "MARKED_AS_FAILED"},
+		{ID: 3, Name: "c", Status: "UNDECIDED"},
 	}
-	fresh := []buildapi.Image{
-		{ID: "a", Status: "FAILED"},   // new failure
-		{ID: "b", Status: "SUCCESS"},  // recovery
-		{ID: "c", Status: "BUILDING"}, // no change
-		{ID: "d", Status: "BUILDING"}, // new image
+	fresh := []buildapi.Artefact{
+		{ID: 1, Name: "a", Status: "MARKED_AS_FAILED"}, // new failure
+		{ID: 2, Name: "b", Status: "APPROVED"},          // recovery
+		{ID: 3, Name: "c", Status: "UNDECIDED"},          // no change
+		{ID: 4, Name: "d", Status: "UNDECIDED"},          // new artefact
 	}
 
 	report := Diff(old, fresh)
@@ -143,7 +142,41 @@ func TestDiffMixed(t *testing.T) {
 	if len(report.OtherChanges) != 0 {
 		t.Errorf("OtherChanges: want 0, got %d", len(report.OtherChanges))
 	}
-	if len(report.NewImages) != 1 {
-		t.Errorf("NewImages: want 1, got %d", len(report.NewImages))
+	if len(report.NewArtefacts) != 1 {
+		t.Errorf("NewArtefacts: want 1, got %d", len(report.NewArtefacts))
+	}
+}
+
+func TestLatestRelease(t *testing.T) {
+	artefacts := []buildapi.Artefact{
+		{Release: "noble", Version: "20260402"},
+		{Release: "noble", Version: "20260401"},
+		{Release: "plucky", Version: "20260513"},
+		{Release: "bionic", Version: "20260301"},
+	}
+	got := LatestRelease(artefacts)
+	if got != "plucky" {
+		t.Fatalf("expected plucky, got %s", got)
+	}
+}
+
+func TestLatestReleaseTiebreaker(t *testing.T) {
+	// Same date: release with more artefacts wins (more active).
+	artefacts := []buildapi.Artefact{
+		{Release: "noble", Version: "20260513"},
+		{Release: "noble", Version: "20260513"},
+		{Release: "noble", Version: "20260513"},
+		{Release: "22", Version: "20260513.1"}, // dot-suffix: base date still 20260513
+	}
+	got := LatestRelease(artefacts)
+	if got != "noble" {
+		t.Fatalf("expected noble (more artefacts on same base date), got %s", got)
+	}
+}
+
+func TestLatestReleaseEmpty(t *testing.T) {
+	got := LatestRelease(nil)
+	if got != "" {
+		t.Fatalf("expected empty string, got %s", got)
 	}
 }

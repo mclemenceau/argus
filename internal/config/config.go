@@ -7,7 +7,7 @@ import (
 
 type Config struct {
 	OpenRouterAPIKey string
-	BuildAPIURL      string
+	TestObserverURL  string
 	TemporalHost     string
 	Port             string
 	ServerURL        string // base URL the worker uses to push to the HTTP server
@@ -21,7 +21,7 @@ func Load() (*Config, error) {
 
 	return &Config{
 		OpenRouterAPIKey: apiKey,
-		BuildAPIURL:      envOrDefault("BUILD_API_URL", "http://localhost:8000"),
+		TestObserverURL:  envOrDefault("TEST_OBSERVER_URL", "https://tests-api.ubuntu.com"),
 		TemporalHost:     envOrDefault("TEMPORAL_HOST", "localhost:7233"),
 		Port:             envOrDefault("PORT", "8080"),
 		ServerURL:        envOrDefault("SERVER_URL", "http://localhost:8080"),

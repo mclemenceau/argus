@@ -9,7 +9,7 @@ import (
 	"github.com/mclemenceau/argus/internal/buildapi"
 )
 
-// Snapshot persists []Image to a JSON file with atomic writes.
+// Snapshot persists []Artefact to a JSON file with atomic writes.
 type Snapshot struct {
 	path string
 }
@@ -18,8 +18,8 @@ func New(path string) *Snapshot {
 	return &Snapshot{path: path}
 }
 
-// Read returns the persisted image list. Returns nil, nil when no snapshot exists yet.
-func (s *Snapshot) Read() ([]buildapi.Image, error) {
+// Read returns the persisted artefact list. Returns nil, nil when no snapshot exists yet.
+func (s *Snapshot) Read() ([]buildapi.Artefact, error) {
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -27,16 +27,16 @@ func (s *Snapshot) Read() ([]buildapi.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	var images []buildapi.Image
-	if err := json.Unmarshal(data, &images); err != nil {
+	var artefacts []buildapi.Artefact
+	if err := json.Unmarshal(data, &artefacts); err != nil {
 		return nil, err
 	}
-	return images, nil
+	return artefacts, nil
 }
 
-// Write persists images atomically: write to a temp file then rename.
-func (s *Snapshot) Write(images []buildapi.Image) error {
-	data, err := json.MarshalIndent(images, "", "  ")
+// Write persists artefacts atomically: write to a temp file then rename.
+func (s *Snapshot) Write(artefacts []buildapi.Artefact) error {
+	data, err := json.MarshalIndent(artefacts, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -52,33 +52,36 @@ func (s *Snapshot) Write(images []buildapi.Image) error {
 }
 
 // Diff compares an old snapshot against a fresh fetch and categorises every change.
-func Diff(old, fresh []buildapi.Image) buildapi.ChangeReport {
-	oldByID := make(map[string]buildapi.Image, len(old))
-	for _, img := range old {
-		oldByID[img.ID] = img
+// Status vocabulary: APPROVED | MARKED_AS_FAILED | UNDECIDED
+// MARKED_AS_FAILED is treated as the failure state for alerting purposes.
+func Diff(old, fresh []buildapi.Artefact) buildapi.ChangeReport {
+	oldByID := make(map[int]buildapi.Artefact, len(old))
+	for _, a := range old {
+		oldByID[a.ID] = a
 	}
 
 	var report buildapi.ChangeReport
 
-	for _, img := range fresh {
-		prev, existed := oldByID[img.ID]
+	for _, a := range fresh {
+		prev, existed := oldByID[a.ID]
 		if !existed {
-			report.NewImages = append(report.NewImages, img)
+			report.NewArtefacts = append(report.NewArtefacts, a)
 			continue
 		}
-		if prev.Status == img.Status {
+		if prev.Status == a.Status {
 			continue
 		}
-		delta := buildapi.ImageDelta{
-			Image:     img.ID,
+		delta := buildapi.ArtefactDelta{
+			Name:      a.Name,
+			Release:   a.Release,
+			Version:   a.Version,
 			OldStatus: prev.Status,
-			NewStatus: img.Status,
-			Since:     img.FinishedAt,
+			NewStatus: a.Status,
 		}
 		switch {
-		case img.Status == "FAILED":
+		case a.Status == "MARKED_AS_FAILED":
 			report.NewFailures = append(report.NewFailures, delta)
-		case prev.Status == "FAILED":
+		case prev.Status == "MARKED_AS_FAILED":
 			report.Recoveries = append(report.Recoveries, delta)
 		default:
 			report.OtherChanges = append(report.OtherChanges, delta)
@@ -86,4 +89,43 @@ func Diff(old, fresh []buildapi.Image) buildapi.ChangeReport {
 	}
 
 	return report
+}
+
+// LatestRelease returns the release name with the most recent build activity.
+// Version strings may be YYYYMMDD or YYYYMMDD.N (re-spin suffix).
+// Primary sort: base date (first 8 chars). Tiebreaker: artefact count (more = more active).
+func LatestRelease(artefacts []buildapi.Artefact) string {
+	type releaseStats struct {
+		baseDate string
+		count    int
+	}
+	stats := make(map[string]*releaseStats)
+
+	for _, a := range artefacts {
+		base := a.Version
+		if len(base) > 8 {
+			base = base[:8]
+		}
+		s, ok := stats[a.Release]
+		if !ok {
+			stats[a.Release] = &releaseStats{baseDate: base, count: 1}
+			continue
+		}
+		s.count++
+		if base > s.baseDate {
+			s.baseDate = base
+		}
+	}
+
+	var bestRelease string
+	var bestDate string
+	var bestCount int
+	for release, s := range stats {
+		if s.baseDate > bestDate || (s.baseDate == bestDate && s.count > bestCount) {
+			bestDate = s.baseDate
+			bestCount = s.count
+			bestRelease = release
+		}
+	}
+	return bestRelease
 }
