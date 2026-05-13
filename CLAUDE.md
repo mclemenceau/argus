@@ -132,7 +132,7 @@ Flow 2 — "Why did ubuntu-server-amd64 fail?"
 ## Development rules
 
 ### Before every commit
-Run these two commands and fix all failures before committing:
+ALWAYS run these two commands and fix all failures before committing:
 ```
 golangci-lint run ./...
 go test -race -count=1 ./...
