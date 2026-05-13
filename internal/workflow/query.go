@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	"fmt"
+	"strings"
 	"time"
 
 	sdk "go.temporal.io/sdk/workflow"
@@ -23,40 +23,64 @@ func QueryWorkflow(ctx sdk.Context, query string) (buildapi.AgentReply, error) {
 		return buildapi.AgentReply{}, err
 	}
 
-	// 2. Resolve the query to an artefact name via LLM fuzzy match.
+	// 2. Resolve query intent via LLM fuzzy match.
 	names := make([]string, len(artefacts))
 	for i, a := range artefacts {
 		names[i] = a.Name
 	}
 
-	var matchedName string
-	if err := sdk.ExecuteActivity(ctx, act.FuzzyMatch, query, names).Get(ctx, &matchedName); err != nil {
+	var match activities.MatchResult
+	if err := sdk.ExecuteActivity(ctx, act.FuzzyMatch, query, names).Get(ctx, &match); err != nil {
 		return buildapi.AgentReply{}, err
 	}
 
-	if matchedName == "" {
+	// 3a. List intent — filter artefacts and produce a markdown table.
+	if match.ListIntent {
+		filtered := filterByRelease(artefacts, match.Release)
+		var reply buildapi.AgentReply
+		if err := sdk.ExecuteActivity(ctx, act.ComposeListReply, query, filtered).Get(ctx, &reply); err != nil {
+			return buildapi.AgentReply{}, err
+		}
+		reply.WorkflowID = sdk.GetInfo(ctx).WorkflowExecution.ID
+		return reply, nil
+	}
+
+	// 3b. No match for a single-artefact query.
+	if match.MatchedID == "" {
 		return buildapi.AgentReply{
-			Summary:    fmt.Sprintf("No artefact found matching %q. Known artefacts: %v", query, names),
-			Category:   "unknown",
+			Summary:    "I couldn't find an artefact matching that query. Try asking for a specific image name or a release overview.",
 			WorkflowID: sdk.GetInfo(ctx).WorkflowExecution.ID,
 		}, nil
 	}
 
-	// 3. Find the matched artefact struct.
+	// 4. Find the matched artefact struct.
 	var artefact buildapi.Artefact
 	for _, a := range artefacts {
-		if a.Name == matchedName {
+		if a.Name == match.MatchedID {
 			artefact = a
 			break
 		}
 	}
 
-	// 4. Compose a reply based on artefact status.
-	// Log analysis is not yet wired (no build log URLs from Test Observer).
+	// 5. Compose a reply based on artefact status.
 	var reply buildapi.AgentReply
 	if err := sdk.ExecuteActivity(ctx, act.ComposeReply, artefact, (*activities.LogAnalysis)(nil)).Get(ctx, &reply); err != nil {
 		return buildapi.AgentReply{}, err
 	}
 	reply.WorkflowID = sdk.GetInfo(ctx).WorkflowExecution.ID
 	return reply, nil
+}
+
+func filterByRelease(artefacts []buildapi.Artefact, release string) []buildapi.Artefact {
+	if release == "" {
+		return artefacts
+	}
+	r := strings.ToLower(release)
+	out := make([]buildapi.Artefact, 0, len(artefacts))
+	for _, a := range artefacts {
+		if strings.ToLower(a.Release) == r {
+			out = append(out, a)
+		}
+	}
+	return out
 }
